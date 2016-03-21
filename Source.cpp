@@ -95,9 +95,8 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 				d.str[i] = vsapi->propGetFloat(in, "str", i, nullptr);
 			else
 				d.str[i] = d.str[i - 1];
-		const int height = d.vi->height >> (i ? d.vi->format->subSamplingH : 0);
-		if (d.mode[i] && height < 3) {
-			vsapi->setError(out, "MinSRP: corresponding plane's height must be greater than or equal to 3");
+		if (d.vi->format->subSamplingH || d.vi->format->subSamplingW) {
+			vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
 			vsapi->freeNode(d.node);
 			return;
 		}
