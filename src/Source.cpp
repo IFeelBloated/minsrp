@@ -102,7 +102,7 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 		return;
 	}
 	if (d.vi->format->subSamplingH || d.vi->format->subSamplingW) {
-	        vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
+		vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
 		vsapi->freeNode(d.node);
 		return;
 		}
