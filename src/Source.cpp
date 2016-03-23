@@ -95,17 +95,17 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 				d.str[i] = vsapi->propGetFloat(in, "str", i, nullptr);
 			else
 				d.str[i] = d.str[i - 1];
-		if (d.vi->format->subSamplingH || d.vi->format->subSamplingW) {
-			vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
-			vsapi->freeNode(d.node);
-			return;
-		}
 	}
 	if (!isConstantFormat(d.vi)) {
 		vsapi->setError(out, "MinSRP: only input with constant format supported");
 		vsapi->freeNode(d.node);
 		return;
 	}
+	if (d.vi->format->subSamplingH || d.vi->format->subSamplingW) {
+	        vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
+		vsapi->freeNode(d.node);
+		return;
+		}
 	data = new MinSRPData;
 	*data = d;
 	vsapi->createFilter(in, out, "MinSRP", minsrpInit, minsrpGetFrame, minsrpFree, fmParallel, 0, data, core);
