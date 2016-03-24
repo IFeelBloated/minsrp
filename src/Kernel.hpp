@@ -102,19 +102,36 @@ static void _process_plane_3x3(const T *&srcp, int src_stride, T *&dstp, int dst
 	dstp = dsttmp;
 }
 
-static inline void _reverse_dif(const float *&srcp, float *&dstp, int x, double _amp) {
-	dstp[x] = static_cast<float>((1. + _amp) * srcp[x] - dstp[x] * _amp);
+static inline void _reverse_dif(const float *&srcp, float *&dstp, int x, double _amp, bool _linear) {
+	if (_linear)
+		dstp[x] = static_cast<float>((1. + _amp) * srcp[x] - dstp[x] * _amp);
+	else
+		dstp[x] = static_cast<float>(srcp[x] +
+			(_amp * 4. * pow(_abs(srcp[x] * 256. - dstp[x] * 256.) / 4., 0.25)) *
+			((srcp[x] * 256. - dstp[x] * 256.) / (_abs(srcp[x] * 256. - dstp[x] * 256.) + 1.001)) / 256.);
 }
 
-static inline void _reverse_dif(const uint16_t *&srcp, uint16_t *&dstp, int x, double _amp) {
-	long val = static_cast<long>((1. + _amp) * srcp[x] - dstp[x] * _amp);
-	_clamp(val, sizeof(uint16_t) << 3);
+static inline void _reverse_dif(const uint16_t *&srcp, uint16_t *&dstp, int x, double _amp, bool _linear) {
+	long val = 0l;
+	if (_linear)
+		val = static_cast<long>((1. + _amp) * srcp[x] - dstp[x] * _amp);
+	else
+		val = static_cast<long>(srcp[x] +
+			(_amp * 4. * pow(_abs(srcp[x] / 256. - dstp[x] / 256.) / 4., 0.25)) *
+			((srcp[x] / 256. - dstp[x] / 256.) / (_abs(srcp[x] / 256. - dstp[x] / 256.) + 1.001)) * 256.);
+	_clamp(val, 16);
 	dstp[x] = static_cast<uint16_t>(val);
 }
 
-static inline void _reverse_dif(const uint8_t *&srcp, uint8_t *&dstp, int x, double _amp) {
-	long val = static_cast<long>((1. + _amp) * srcp[x] - dstp[x] * _amp);
-	_clamp(val, sizeof(uint8_t) << 3);
+static inline void _reverse_dif(const uint8_t *&srcp, uint8_t *&dstp, int x, double _amp, bool _linear) {
+	long val = 0l;
+	if (_linear)
+		val = static_cast<long>((1. + _amp) * srcp[x] - dstp[x] * _amp);
+	else
+		val = static_cast<long>(srcp[x] +
+			(_amp * 4. * pow(_abs(static_cast<double>(srcp[x]) - dstp[x]) / 4., 0.25)) *
+			((static_cast<double>(srcp[x]) - dstp[x]) / (_abs(static_cast<double>(srcp[x]) - dstp[x]) + 1.001)));
+	_clamp(val, 8);
 	dstp[x] = static_cast<uint8_t>(val);
 }
 
@@ -123,11 +140,10 @@ static inline void _min_dif(const T1 *&srcp, T1 *&dstp, T1 *&dstp_a, T1 *&dstp_b
 	T2 _dif_a = _abs(static_cast<T2>(dstp_a[x]) - srcp[x]);
 	T2 _dif_b = _abs(static_cast<T2>(dstp_b[x]) - srcp[x]);
 	dstp[x] = (_dif_a > _dif_b) ? dstp_b[x] : dstp_a[x];
-	_reverse_dif(srcp, dstp, x, _amp);
 }
 
 template<typename T1, typename T2>
-static void _apply_dif(const T1 *&srcp, int src_stride, T1 *&dstp, int dst_stride, int h, int w, T1 *&dstp_a, T1 *&dstp_b, double _amp, int mode) {
+static void _apply_dif(const T1 *&srcp, int src_stride, T1 *&dstp, int dst_stride, int h, int w, T1 *&dstp_a, T1 *&dstp_b, double _amp, int mode, bool _linear) {
 	const T1 *srctmp = srcp;
 	T1 *dsttmp = dstp;
 	T1 *dst_atmp = dstp_a;
@@ -138,14 +154,16 @@ static void _apply_dif(const T1 *&srcp, int src_stride, T1 *&dstp, int dst_strid
 				dstp[x] = srcp[x];
 			else if (mode == 1) {
 				dstp[x] = dstp_a[x];
-				_reverse_dif(srcp, dstp, x, _amp);
+				_reverse_dif(srcp, dstp, x, _amp, _linear);
 			}
 			else if (mode == 2) {
 				dstp[x] = dstp_b[x];
-				_reverse_dif(srcp, dstp, x, _amp);
+				_reverse_dif(srcp, dstp, x, _amp, _linear);
 			}
-			else
+			else {
 				_min_dif<T1, T2>(srcp, dstp, dstp_a, dstp_b, x, _amp);
+				_reverse_dif(srcp, dstp, x, _amp, _linear);
+			}
 		}
 		dstp += dst_stride;
 		srcp += src_stride;
@@ -159,29 +177,29 @@ static void _apply_dif(const T1 *&srcp, int src_stride, T1 *&dstp, int dst_strid
 }
 
 template<typename T1, typename T2>
-static inline void _do_it_(const VSAPI *&vsapi, const VSFrameRef *&src, int src_stride, VSFrameRef *&dst, int dst_stride, VSFrameRef *&pad, int pad_stride, int h, int w, VSFrameRef *&dst_a, VSFrameRef *&dst_b, int plane, double _amp, int mode) {
+static inline void _do_it_(const VSAPI *&vsapi, const VSFrameRef *&src, int src_stride, VSFrameRef *&dst, int dst_stride, VSFrameRef *&pad, int pad_stride, int h, int w, VSFrameRef *&dst_a, VSFrameRef *&dst_b, int plane, double _amp, int mode, bool _linear) {
 	const T1 *srcp = reinterpret_cast<const T1 *>(vsapi->getReadPtr(src, plane));
 	T1 *padp = reinterpret_cast<T1 *>(vsapi->getWritePtr(pad, plane));
 	T1 *dstp = reinterpret_cast<T1 *>(vsapi->getWritePtr(dst, plane));
 	T1 *dstp_a = reinterpret_cast<T1 *>(vsapi->getWritePtr(dst_a, plane));
 	T1 *dstp_b = reinterpret_cast<T1 *>(vsapi->getWritePtr(dst_b, plane));
 	if (!mode)
-		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode);
+		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode, _linear);
 	else if (mode == 1) {
 		_pad<T1, T2>(srcp, src_stride, padp, pad_stride, h, w);
 		_process_plane_3x3(srcp, src_stride, dstp_a, dst_stride, h, w, true);
-		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode);
+		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode, _linear);
 	}
 	else if (mode == 2) {
 		_pad<T1, T2>(srcp, src_stride, padp, pad_stride, h, w);
 		_process_plane_3x3(srcp, src_stride, dstp_b, dst_stride, h, w, false);
-		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode);
+		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode, _linear);
 	}
 	else {
 		_pad<T1, T2>(srcp, src_stride, padp, pad_stride, h, w);
 		_process_plane_3x3(srcp, src_stride, dstp_a, dst_stride, h, w, true);
 		_process_plane_3x3(srcp, src_stride, dstp_b, dst_stride, h, w, false);
-		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode);
+		_apply_dif<T1, T2>(srcp, src_stride, dstp, dst_stride, h, w, dstp_a, dstp_b, _amp, mode, _linear);
 	}
 }
 

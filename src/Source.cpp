@@ -6,6 +6,7 @@ struct MinSRPData {
 	const VSVideoInfo *vi;
 	double str[3];
 	int mode[3];
+	bool linear[3];
 };
 
 static void VS_CC minsrpInit(VSMap *in, VSMap *out, void **instanceData, VSNode *node, VSCore *core, const VSAPI *vsapi) {
@@ -35,12 +36,12 @@ static const VSFrameRef *VS_CC minsrpGetFrame(int n, int activationReason, void 
 			int pad_stride = vsapi->getStride(pad, plane) / d->vi->format->bytesPerSample;
 			int h = vsapi->getFrameHeight(src, plane);
 			int w = vsapi->getFrameWidth(src, plane);
-			if (d->vi->format->bytesPerSample == 4)
-				_do_it_<float, double>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane]);
-			else if (d->vi->format->bytesPerSample > 1 && d->vi->format->bytesPerSample < 4)
-				_do_it_<uint16_t, int32_t>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane]);
+			if (d->vi->format->bitsPerSample == 32)
+				_do_it_<float, double>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane], d->linear[plane]);
+			else if (d->vi->format->bitsPerSample > 8 && d->vi->format->bitsPerSample < 32)
+				_do_it_<uint16_t, int32_t>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane], d->linear[plane]);
 			else
-				_do_it_<uint8_t, int32_t>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane]);
+				_do_it_<uint8_t, int32_t>(vsapi, src, src_stride, dst, dst_stride, pad, pad_stride, h, w, dst_a, dst_b, plane, d->str[plane], d->mode[plane], d->linear[plane]);
 		}
 		vsapi->freeFrame(src);
 		vsapi->freeFrame(pad);
@@ -64,6 +65,7 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 	d.vi = vsapi->getVideoInfo(d.node);
 	const int m = vsapi->propNumElements(in, "mode");
 	const int n = vsapi->propNumElements(in, "str");
+	const int o = vsapi->propNumElements(in, "linear");
 	if (m > d.vi->format->numPlanes) {
 		vsapi->setError(out, "MinSRP: number of modes specified must be equal to or fewer than the number of input planes");
 		vsapi->freeNode(d.node);
@@ -71,6 +73,11 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 	}
 	if (n > d.vi->format->numPlanes) {
 		vsapi->setError(out, "MinSRP: number of the specified elements in str array must be equal to or fewer than the number of input planes");
+		vsapi->freeNode(d.node);
+		return;
+	}
+	if (o > d.vi->format->numPlanes) {
+		vsapi->setError(out, "MinSRP: number of the specified elements in linear array must be equal to or fewer than the number of input planes");
 		vsapi->freeNode(d.node);
 		return;
 	}
@@ -95,6 +102,13 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 				d.str[i] = vsapi->propGetFloat(in, "str", i, nullptr);
 			else
 				d.str[i] = d.str[i - 1];
+		if (o == -1)
+			d.linear[0] = d.linear[1] = d.linear[2] = false;
+		else
+			if (i < o)
+				d.linear[i] = !!int64ToIntS(vsapi->propGetInt(in, "linear", i, nullptr));
+			else
+				d.linear[i] = d.linear[i - 1];
 	}
 	if (!isConstantFormat(d.vi)) {
 		vsapi->setError(out, "MinSRP: only input with constant format supported");
@@ -105,7 +119,12 @@ static void VS_CC minsrpCreate(const VSMap *in, VSMap *out, void *userData, VSCo
 		vsapi->setError(out, "MinSRP: 4:4:4 or gray input required!");
 		vsapi->freeNode(d.node);
 		return;
-		}
+	}
+	if (d.vi->format->sampleType == stFloat && d.vi->format->bitsPerSample == 16) {
+		vsapi->setError(out, "MinSRP: I don't know what half precision is.");
+		vsapi->freeNode(d.node);
+		return;
+	}
 	data = new MinSRPData;
 	*data = d;
 	vsapi->createFilter(in, out, "MinSRP", minsrpInit, minsrpGetFrame, minsrpFree, fmParallel, 0, data, core);
@@ -116,6 +135,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
 	registerFunc("Sharp",
 		"clip:clip;"
 		"str:float[]:opt;"
-		"mode:int[]:opt;",
+		"mode:int[]:opt;"
+		"linear:int[]:opt",
 		minsrpCreate, 0, plugin);
 }
