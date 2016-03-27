@@ -155,7 +155,7 @@ static void _do_it_(const VSAPI *vsapi, const VSFrameRef *src, int src_stride, V
 				_reverse_dif(srcp, dstp, x, _amp, _linear);
 			}
 			_JUMP
-				dstp_a += dst_stride;
+			dstp_a += dst_stride;
 		}
 	}
 	else if (mode == 2) {
@@ -167,7 +167,7 @@ static void _do_it_(const VSAPI *vsapi, const VSFrameRef *src, int src_stride, V
 				_reverse_dif(srcp, dstp, x, _amp, _linear);
 			}
 			_JUMP
-				dstp_b += dst_stride;
+			dstp_b += dst_stride;
 		}
 	}
 	else {
@@ -182,7 +182,7 @@ static void _do_it_(const VSAPI *vsapi, const VSFrameRef *src, int src_stride, V
 				_reverse_dif(srcp, dstp, x, _amp, _linear);
 			}
 			_JUMP
-				dstp_a += dst_stride;
+			dstp_a += dst_stride;
 			dstp_b += dst_stride;
 		}
 	}
