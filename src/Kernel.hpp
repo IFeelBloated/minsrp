@@ -2,7 +2,7 @@
 #define KERNEL_HPP
 
 #define _JUMP \
-		dstp += dst_stride; \
+        dstp += dst_stride; \
         srcp += src_stride;
 
 #include <algorithm>
