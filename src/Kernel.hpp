@@ -13,6 +13,8 @@
 #define _PERFORM_PAD \
         _pad<T1, T2>(srcp, src_stride, padp, pad_stride, h, w)
 
+#define _SECURE_SCL 0
+
 #include <algorithm>
 #include "VapourSynth.h"
 #include "VSHelper.h"
