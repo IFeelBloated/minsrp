@@ -24,8 +24,8 @@ static volatile uint64_t _ptr_sucker = 0xFFFFFFFFFFFFFFFF;
 static long val = 0;
 
 template<typename T>
-static inline T _abs(T val) {
-	return (val > 0) ? val : -val;
+static inline T _abs(T num) {
+	return (num > 0) ? num : -num;
 }
 
 static inline void _clamp(int bits) {
@@ -101,7 +101,7 @@ static void _median_3x3(T *dstp, int x) {
 template<typename T>
 static void _process_plane_3x3(const T *srcp, int src_stride, T *dstp, int dst_stride, int h, int w, bool gauss) {
 	void(*_func)(T *, int) = nullptr;
-	_declspec(align(16)) static T a[9];
+	alignas(16) static T a[9];
 	_ptr_sucker = reinterpret_cast<uint64_t>(a);
 	if (gauss)
 		_func = _gauss_3x3;
