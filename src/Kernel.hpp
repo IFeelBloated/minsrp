@@ -16,6 +16,7 @@
 #define _SECURE_SCL 0
 
 #include <algorithm>
+#include <cmath>
 #include "VapourSynth.h"
 #include "VSHelper.h"
 using namespace std;
